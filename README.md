@@ -1,5 +1,5 @@
 # Advancing-Accessible-Diagnostics-Using-CNNs
-## A CNN-Based Model for Early Detection of Retinal and Corneal Eye Diseases
+### A CNN-Based Model for Early Detection of Retinal and Corneal Eye Diseases
 
 The proposed capstone project aims to investigate Convolutional Neural Networks (CNN) for detecting retinal and corneal eye diseases through computer vision. With the increasing frequency of eye-related conditions, early and accurate detection is essential for timely intervention. The hope is to develop accessible AI algorithms as a proof-of-concept, capable of identifying early signs of internal diseases, such as diabetic retinopathy and glaucoma, and external ones, such as conjunctivitis and cellulitis. Multiple specialized CNN algorithms will be developed, each tailored to detect a specific eye disease.
 Leveraging CNNs to analyze visual patterns in eye images, each algorithm will provide diagnosis suggestions for individuals and ophthalmologists, especially in regions with limited healthcare access. This involves the development of a prototype within health-related computer vision applications, focusing on deep learning and its role in accessible diagnostics, and addressing a healthcare need with technological innovation. 
