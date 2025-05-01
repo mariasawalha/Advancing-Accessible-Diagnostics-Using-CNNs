@@ -169,6 +169,9 @@ X_train_comb = np.concatenate(X_train_list, axis=1)
 X_val_comb = np.concatenate(X_val_list, axis=1)
 X_test_comb = np.concatenate(X_test_list, axis=1)
 
+np.save("X_train_comb.npy", X_train_comb)
+np.save("y_train.npy", y_train)
+
 # ------------------ Meta-Classifier Ensemble ------------------
 xgb = XGBClassifier(n_estimators=300, learning_rate=0.05)
 rf = RandomForestClassifier(n_estimators=800)
