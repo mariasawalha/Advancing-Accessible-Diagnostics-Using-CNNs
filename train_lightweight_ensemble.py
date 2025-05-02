@@ -83,14 +83,26 @@ class AlbuDataGenerator(Sequence):
         return np.array(images), tf.keras.utils.to_categorical(batch_y, num_classes=len(class_names))
 
 # --------------------- Focal Loss ---------------------
-def focal_loss(gamma=2., alpha=0.25):
-    def loss(y_true, y_pred):
+class FocalLoss(tf.keras.losses.Loss):
+    def __init__(self, gamma=2., alpha=0.25, **kwargs):
+        super().__init__(**kwargs)
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def call(self, y_true, y_pred):
         epsilon = tf.keras.backend.epsilon()
         y_pred = tf.clip_by_value(y_pred, epsilon, 1. - epsilon)
         cross_entropy = -y_true * tf.math.log(y_pred)
-        weight = alpha * tf.pow(1 - y_pred, gamma)
+        weight = self.alpha * tf.pow(1 - y_pred, self.gamma)
         return tf.reduce_mean(tf.reduce_sum(weight * cross_entropy, axis=1))
-    return loss
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "gamma": self.gamma,
+            "alpha": self.alpha
+        })
+        return config
 
 # ------------------ Training Pipeline ------------------
 def build_light_cnn(model_fn, name):
@@ -101,14 +113,14 @@ def build_light_cnn(model_fn, name):
     x = Dense(128, activation='relu')(x)
     output = Dense(len(class_names), activation='softmax')(x)
     model = Model(base.input, output)
-    model.compile(optimizer='adam', loss=focal_loss(), metrics=['accuracy'])
+    model.compile(optimizer='adam', loss=FocalLoss(), metrics=['accuracy'])
     model.fit(train_gen, validation_data=val_gen, epochs=epochs_transfer,
               callbacks=[EarlyStopping(patience=2, restore_best_weights=True)])
 
     base.trainable = True
     for layer in base.layers[:-50]:
         layer.trainable = False
-    model.compile(optimizer=Adam(1e-5), loss=focal_loss(), metrics=['accuracy'])
+    model.compile(optimizer=Adam(1e-5), loss=FocalLoss(), metrics=['accuracy'])
     model.fit(train_gen, validation_data=val_gen, epochs=epochs_finetune,
               callbacks=[EarlyStopping(patience=2, restore_best_weights=True)])
     return model
@@ -148,6 +160,8 @@ print(f"Training: {len(X_train)} images")
 print(f"Validation: {len(X_val)} images")
 print(f"Test: {len(X_test)} images")
 
+np.save("X_test_paths.npy", np.array(X_test))
+
 train_gen = AlbuDataGenerator(X_train, y_train, batch_size, augment=True)
 val_gen = AlbuDataGenerator(X_val, y_val, batch_size, augment=False)
 test_gen = AlbuDataGenerator(X_test, y_test, batch_size, augment=False)
@@ -161,6 +175,8 @@ X_train_list, X_val_list, X_test_list = [], [], []
 
 for name, fn in models.items():
     model = build_light_cnn(fn, name)
+    # Save the trained Keras model for explainability
+    model.save(f"{name}_model.keras")
     X_train_list.append(extract_features(model, train_gen))
     X_val_list.append(extract_features(model, val_gen))
     X_test_list.append(extract_features(model, test_gen))
@@ -168,9 +184,6 @@ for name, fn in models.items():
 X_train_comb = np.concatenate(X_train_list, axis=1)
 X_val_comb = np.concatenate(X_val_list, axis=1)
 X_test_comb = np.concatenate(X_test_list, axis=1)
-
-np.save("X_train_comb.npy", X_train_comb)
-np.save("y_train.npy", y_train)
 
 # ------------------ Meta-Classifier Ensemble ------------------
 xgb = XGBClassifier(n_estimators=300, learning_rate=0.05)
@@ -200,3 +213,36 @@ plt.show()
 auc_scores = roc_auc_score(y_test_bin, y_probs, average=None)
 for i, score in enumerate(auc_scores):
     print(f"{class_names[i]} AUC: {score:.4f}")
+
+from sklearn.metrics import roc_curve
+from itertools import cycle
+
+# ------------------ AUC-ROC Curve Plot ------------------
+fpr = dict()
+tpr = dict()
+
+plt.figure(figsize=(10, 8))
+colors = cycle(["blue", "green", "orange", "red"])
+
+for i, color in zip(range(len(class_names)), colors):
+    fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_probs[:, i])
+    plt.plot(fpr[i], tpr[i], color=color, lw=2,
+             label=f"{class_names[i]} (AUC = {auc_scores[i]:.2f})")
+
+plt.plot([0, 1], [0, 1], 'k--', lw=2)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('AUC-ROC Curve by Class')
+plt.legend(loc="lower right")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# ------------------ Save Models and Data for Explainability ------------------
+import pickle
+np.save("X_test_comb.npy", X_test_comb)
+np.save("y_test.npy", y_test)
+with open("cat_model.pkl", "wb") as f:
+    pickle.dump(ensemble, f)
